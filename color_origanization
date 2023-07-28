@@ -1,0 +1,48 @@
+# Untitled - By: Dell - 周四 7月 27 2023
+
+import sensor, image, time
+from pyb import UART
+uart= UART(3,115200)
+
+green_threshold=(53, 32, -36, -1, -67, 2)
+red_threshold=((0, 57, 34, 82, -30, 127))
+
+sensor.reset()
+sensor.set_pixformat(sensor.RGB565)
+sensor.set_framesize(sensor.QVGA)
+sensor.skip_frames(time = 2000)
+sensor.set_auto_gain(False)#关闭白平衡，颜色识别
+sensor.set_auto_whitebal(False)
+
+clock = time.clock()
+
+while(True):
+    clock.tick()
+    img = sensor.snapshot()
+    all_blobs = img.find_blobs([green_threshold,red_threshold])
+    green_blob = img.find_blobs([green_threshold])
+    red_blob = img.find_blobs([red_threshold])
+    for blob in img.find_blobs([green_threshold,red_threshold]):
+        img.draw_rectangle(blob.rect())
+        img.draw_cross(blob.cx(),blob.cy())
+    if all_blobs:
+        for blob in all_blobs:
+            x = blob.x()
+            y = blob.y()
+            width=blob.w()
+            height=blob.h()
+
+            center_x=blob.cx()
+            centet_y=blob.cy()
+
+            img.draw_rectangle([x,y,width,height])
+
+            if green_blob:
+                print('green')
+                uart.write('1')
+
+            elif red_blob:
+                print('red')
+                uart.write('0')
+
+    print(clock.fps())

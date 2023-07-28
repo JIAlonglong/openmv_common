@@ -1,0 +1,92 @@
+import sensor, image, time,math,pyb
+from pyb import UART
+import json
+import ustruct
+
+uart= UART(3,115200)
+uart.init(115200, bits=8, parity=None, stop=1)
+thresholds = [(0, 57, 34, 82, -30, 127), # generic_red_thresholds
+               (86, 1, -74, -7, -60, 115)] # generic_green_thresholds
+
+red_blob=(0, 57, 34, 82, -30, 127)
+green_blob= (86, 1, -74, -7, -60, 115)
+
+sensor.reset()
+sensor.set_pixformat(sensor.RGB565)
+sensor.set_framesize(sensor.QQVGA)
+sensor.skip_frames(time = 2000)
+sensor.set_auto_gain(False) # must be turned off for color tracking
+sensor.set_auto_whitebal(False) # must be turned off for color tracking
+clock = time.clock()
+
+def sending_data(cx,cy,cw,ch):
+    global uart;
+    #frame=[0x2C,18,cx%0xff,int(cx/0xff),cy%0xff,int(cy/0xff),0x5B];
+    #data = bytearray(frame)
+    data = ustruct.pack("<bbhhhhb",      #格式为俩个字符俩个短整型(2字节)
+                   0x2C,                      #帧头1
+                   0x12,                      #帧头2
+                   int(cx), # up sample by 4   #数据1
+                   int(cy), # up sample by 4    #数据2
+                   int(cw), # up sample by 4    #数据1
+                   int(ch), # up sample by 4    #数据2
+                   0x5B)
+    uart.write(data);   #必须要传入一个字节数组
+
+while(True):
+    print("no dectedtion")
+    FH = bytearray([0x2C,0x12,3,0,0,0,0x5B])
+    uart.write(FH)
+    green=1;
+    red=0;
+    clock.tick()
+    img = sensor.snapshot().lens_corr(1.8)
+    for blob in img.find_blobs(thresholds,pixels_threshold=200,area_threshold=200):
+
+        print('该形状占空比为',blob.density())
+
+        if blob.density()>0.805:
+           print("检测为长方形  ",end='')
+           img.draw_rectangle(blob.rect())
+           print('长方形长',blob.w(),'宽',blob.h())
+           if red_blob:
+              print('red')
+              FH = bytearray([0x2C,0x12,1,0,0,0,0x5B])
+              uart.write(FH)
+
+        elif blob.density()>0.805:
+           print("检测为长方形  ",end='')
+           img.draw_rectangle(blob.rect())
+           print('长方形长',blob.w(),'宽',blob.h())
+           if green_blob:
+              print('green')
+              FH = bytearray([0x2C,0x12,2,0,0,0,0x5B])
+              uart.write(FH)
+
+        elif blob.density()>0.25:
+            print("检测为圆  ",end='')
+            img.draw_keypoints([(blob.cx(), blob.cy(), int(math.degrees(blob.rotation())))], size=20)
+            img.draw_circle((blob.cx(), blob.cy(),int((blob.w()+blob.h())/4)))
+            print('圆形半径',(blob.w()+blob.h())/4)
+            if red_blob:
+              print('red')
+              FH = bytearray([0x2C,0x12,1,0,0,0,0x5B])
+              uart.write(FH)
+
+        elif blob.density()>0.10:
+            print("检测为圆  ",end='')
+            img.draw_keypoints([(blob.cx(), blob.cy(), int(math.degrees(blob.rotation())))], size=20)
+            img.draw_circle((blob.cx(), blob.cy(),int((blob.w()+blob.h())/4)))
+            print('圆形半径',(blob.w()+blob.h())/4)
+            if green_blob:
+              print('green')
+              FH = bytearray([0x2C,0x12,2,0,0,0,0x5B])
+              uart.write(FH)
+
+        else:
+            print("no dectedtion")
+            FH = bytearray([0x2C,0x12,3,0,0,0,0x5B])
+            uart.write(FH)
+
+
+    print(clock.fps())
